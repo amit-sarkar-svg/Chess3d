@@ -64,11 +64,15 @@ class BoardRenderer:
     # ------------------------------------------------------------------------------------
     # Selection Logic
     # ------------------------------------------------------------------------------------
-    def set_selected_tile(self, file: int, rank: int):
+    def set_selected_tile(self, file=None, rank=None):
         """
-        file = 0..7 (columns: a-h)
-        rank = 0..7 (rows: 1-8)
+        Set or clear the selected tile.
+        Pass (file, rank) within 0..7, or None to clear selection.
         """
+        if file is None or rank is None:
+            self.selected_tile = None
+            return
+
         if 0 <= file <= 7 and 0 <= rank <= 7:
             self.selected_tile = (file, rank)
         else:
@@ -90,6 +94,8 @@ class BoardRenderer:
         # Highlight color
         self.shader.set_vec3("highlight_color", self.highlight_color)
         self.shader.set_bool("enable_highlight", False)
+        # Board always uses textures
+        self.shader.set_bool("use_texture", True)
 
         # GL state
         GL.glActiveTexture(GL.GL_TEXTURE0)
@@ -135,8 +141,8 @@ class BoardRenderer:
         model[0, 0] = s
         model[2, 2] = s
 
-        # Translate
-        model[3, 0] = x
-        model[3, 2] = z
+        # Translate (last column for GL column-major layout)
+        model[0, 3] = x
+        model[2, 3] = z
 
         return model

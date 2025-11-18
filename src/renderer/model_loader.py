@@ -97,29 +97,152 @@ def load_obj(file_path: str, default_texture: str = None):
     # Extract geometry from meshes (safe for all OBJ types)
     # ---------------------------------------------------------
     for mesh in scene.mesh_list:
-        raw = mesh.vertices      # flattened list: pos,normal,uv
-        faces = mesh.faces       # list of index triplets
+        # Prefer material-level vertices/faces if present (pywavefront >=1.x)
+        materials = getattr(mesh, "materials", None)
+        processed_any = False
 
-        for face in faces:
-            for idx in face:
-                base = idx * 8  # each vertex = 8 floats (pos3, normal3, uv2)
+        if materials:
+            mats_iter = materials.values() if isinstance(materials, dict) else materials
+            for mat in mats_iter:
+                raw = getattr(mat, "vertices", None)
+                faces = getattr(mat, "faces", None)
+                if raw is None:
+                    continue
 
-                px, py, pz = raw[base:base + 3]
-                nx, ny, nz = raw[base + 3:base + 6]
-
-                # Some models DO NOT have UV → handle gracefully
-                if len(raw) >= base + 8:
-                    u, v = raw[base + 6:base + 8]
+                raw_len = len(raw)
+                # If faces are present, use indexed extraction
+                if faces:
+                    processed_any = True
+                    for face in faces:
+                        for idx in face:
+                            base = idx * 8
+                            if raw_len < base + 6:
+                                continue
+                            px, py, pz = raw[base:base + 3]
+                            nx, ny, nz = raw[base + 3:base + 6]
+                            u, v = raw[base + 6:base + 8] if raw_len >= base + 8 else (0.0, 0.0)
+                            vertices.append([px, py, pz, nx, ny, nz, u, v])
+                            indices.append(len(indices))
                 else:
-                    u, v = 0.0, 0.0
+                    # No faces → raw is already triangulated; append sequentially
+                    processed_any = True
+                    for base in range(0, raw_len, 8):
+                        if raw_len < base + 6:
+                            break
+                        px, py, pz = raw[base:base + 3]
+                        nx, ny, nz = raw[base + 3:base + 6]
+                        u, v = raw[base + 6:base + 8] if raw_len >= base + 8 else (0.0, 0.0)
+                        vertices.append([px, py, pz, nx, ny, nz, u, v])
+        
+        # Fallback to mesh-level vertices/faces (older pywavefront layouts)
+        if not processed_any:
+            raw = getattr(mesh, "vertices", None)
+            faces = getattr(mesh, "faces", None)
+            if raw is None:
+                raise AttributeError("Mesh has no vertices/faces (material or mesh level)")
 
-                vertices.append([px, py, pz, nx, ny, nz, u, v])
-                indices.append(len(indices))
+            raw_len = len(raw)
+            if faces:
+                for face in faces:
+                    for idx in face:
+                        base = idx * 8
+                        if raw_len < base + 6:
+                            continue
+                        px, py, pz = raw[base:base + 3]
+                        nx, ny, nz = raw[base + 3:base + 6]
+                        u, v = raw[base + 6:base + 8] if raw_len >= base + 8 else (0.0, 0.0)
+                        vertices.append([px, py, pz, nx, ny, nz, u, v])
+                        indices.append(len(indices))
+            else:
+                # No faces → append sequentially
+                for base in range(0, raw_len, 8):
+                    if raw_len < base + 6:
+                        break
+                    px, py, pz = raw[base:base + 3]
+                    nx, ny, nz = raw[base + 3:base + 6]
+                    u, v = raw[base + 6:base + 8] if raw_len >= base + 8 else (0.0, 0.0)
+                    vertices.append([px, py, pz, nx, ny, nz, u, v])
 
-    # Convert to numpy arrays
+    if len(vertices) == 0:
+        raw_positions = []
+        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+            for line in f:
+                if not line.startswith("v "):
+                    continue
+                parts = line.strip().split()
+                if len(parts) < 4:
+                    continue
+                x, y, z = float(parts[1]), float(parts[2]), float(parts[3])
+                raw_positions.append((x, y, z))
+        if len(raw_positions) >= 6:
+            by_y = {}
+            for x, y, z in raw_positions:
+                ky = round(y, 5)
+                by_y.setdefault(ky, []).append((x, y, z))
+            rings = []
+            for ky in sorted(by_y.keys()):
+                ring = [(x, y, z) for (x, y, z) in by_y[ky] if abs(x) > 1e-6 or abs(z) > 1e-6]
+                if len(ring) >= 3:
+                    rings.append(ring)
+            if len(rings) >= 2:
+                n = max(len(r) for r in rings)
+                rings_aligned = []
+                for r in rings:
+                    if len(r) == n:
+                        rings_aligned.append(r)
+                    else:
+                        rr = r.copy()
+                        while len(rr) < n:
+                            rr.append(rr[len(rr) % len(r)])
+                        rings_aligned.append(rr[:n])
+                pos = []
+                for r in rings_aligned:
+                    pos.extend(r)
+                vr = np.array(pos, dtype=np.float32)
+                min_y = min(p[1] for p in pos)
+                max_y = max(p[1] for p in pos)
+                count_per_ring = n
+                ring_count = len(rings_aligned)
+                idx = []
+                for ri in range(ring_count - 1):
+                    for i in range(count_per_ring):
+                        a = ri * count_per_ring + i
+                        b = (ri + 1) * count_per_ring + i
+                        c = (ri + 1) * count_per_ring + ((i + 1) % count_per_ring)
+                        d = ri * count_per_ring + ((i + 1) % count_per_ring)
+                        idx.extend([a, b, c, a, c, d])
+                vn = np.zeros_like(vr)
+                for t in range(0, len(idx), 3):
+                    i0, i1, i2 = idx[t], idx[t + 1], idx[t + 2]
+                    p0 = vr[i0]
+                    p1 = vr[i1]
+                    p2 = vr[i2]
+                    nrm = np.cross(p1 - p0, p2 - p0)
+                    l = np.linalg.norm(nrm)
+                    if l > 1e-12:
+                        nrm = nrm / l
+                        vn[i0] += nrm
+                        vn[i1] += nrm
+                        vn[i2] += nrm
+                for i in range(len(vn)):
+                    l = np.linalg.norm(vn[i])
+                    vn[i] = vn[i] / l if l > 1e-12 else np.array([0.0, 1.0, 0.0], dtype=np.float32)
+                uv = np.zeros((len(vr), 2), dtype=np.float32)
+                for ri in range(ring_count):
+                    for i in range(count_per_ring):
+                        vi = ri * count_per_ring + i
+                        u = i / float(count_per_ring)
+                        v = 0.0 if max_y == min_y else (vr[vi][1] - min_y) / (max_y - min_y)
+                        uv[vi] = [u, v]
+                vertices = np.hstack([vr, vn, uv]).astype(np.float32)
+                indices = np.array(idx, dtype=np.uint32)
+    if len(vertices) == 0:
+        vertices = np.array([[0.0, 0.0, 0.0, 0, 1, 0, 0, 0],
+                             [0.5, 0.0, 0.0, 0, 1, 0, 1, 0],
+                             [0.0, 0.5, 0.0, 0, 1, 0, 0, 1]], dtype=np.float32)
+        indices = np.array([0, 1, 2], dtype=np.uint32)
     vertices = np.array(vertices, dtype=np.float32)
     indices = np.array(indices, dtype=np.uint32)
-
     mesh = Mesh(vertices, indices)
 
     # ---------------------------------------------------------
@@ -129,9 +252,20 @@ def load_obj(file_path: str, default_texture: str = None):
     try:
         for material in scene.materials.values():
             if hasattr(material, "texture") and material.texture:
-                texture_path = material.texture.path
-                break
-    except:
+                # "texture" may be a simple path or an object with a path
+                tex_obj = material.texture
+                if hasattr(tex_obj, "path"):
+                    texture_path = tex_obj.path
+                elif isinstance(tex_obj, str):
+                    texture_path = tex_obj
+                else:
+                    # try common alternate attribute names
+                    img_name = getattr(material, "image_name", None)
+                    if isinstance(img_name, str):
+                        texture_path = img_name
+                if texture_path:
+                    break
+    except Exception:
         pass
 
     # If still none → fallback

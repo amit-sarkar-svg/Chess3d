@@ -97,8 +97,12 @@ class PieceRenderer:
         """Remove a piece from a tile."""
         self.board_state.pop((file, rank), None)
 
-    def set_selected_piece(self, file, rank):
-        """Highlight the selected piece."""
+    def set_selected_piece(self, file=None, rank=None):
+        """Highlight the selected piece, or clear selection with None."""
+        if file is None or rank is None:
+            self.selected_piece = None
+            return
+
         if (file, rank) in self.board_state:
             self.selected_piece = (file, rank)
         else:
@@ -131,7 +135,14 @@ class PieceRenderer:
 
             # Texture bind
             GL.glActiveTexture(GL.GL_TEXTURE0)
-            GL.glBindTexture(GL.GL_TEXTURE_2D, tex)
+            tex_id = 0 if self.models[piece_type][color][1] is None else int(self.models[piece_type][color][1])
+            # Set texture usage/fallback color
+            self.shader.set_bool("use_texture", tex_id != 0)
+            if color == "white":
+                self.shader.set_vec3("base_color", np.array([0.9, 0.9, 0.9], dtype=np.float32))
+            else:
+                self.shader.set_vec3("base_color", np.array([0.12, 0.12, 0.12], dtype=np.float32))
+            GL.glBindTexture(GL.GL_TEXTURE_2D, tex_id)
             self.shader.set_int("texture0", 0)
 
             mesh.draw()
@@ -160,9 +171,9 @@ class PieceRenderer:
         M[1, 1] = S
         M[2, 2] = S
 
-        # Translation
-        M[3, 0] = x
-        M[3, 1] = y
-        M[3, 2] = z
+        # Translation (last column for GL column-major layout)
+        M[0, 3] = x
+        M[1, 3] = y
+        M[2, 3] = z
 
         return M

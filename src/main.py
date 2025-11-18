@@ -227,7 +227,8 @@ def main():
 
         # Matrices
         view = camera.get_view_matrix()
-        projection = camera.get_projection_matrix(win.width / win.height)
+        aspect = win.width / max(1, win.height)
+        projection = camera.get_projection_matrix(aspect)
 
         # Draw board and static pieces
         board.draw(view, projection)
@@ -239,6 +240,7 @@ def main():
             shader.use()
             shader.set_mat4("model", e["model"])
             shader.set_float("alpha", e["alpha"])
+            shader.set_bool("use_texture", True)
 
             GL.glActiveTexture(GL.GL_TEXTURE0)
             GL.glBindTexture(GL.GL_TEXTURE_2D, e["texture"])

@@ -46,6 +46,7 @@ class Window:
             raise RuntimeError("Failed to create GLFW window")
 
         glfw.make_context_current(self.window)
+        GL.glViewport(0, 0, self.width, self.height)
 
         # Enable vsync
         glfw.swap_interval(1)
@@ -55,8 +56,9 @@ class Window:
 
         # OpenGL settings
         GL.glEnable(GL.GL_DEPTH_TEST)
-        GL.glEnable(GL.GL_CULL_FACE)
-        GL.glCullFace(GL.GL_BACK)
+        # Temporarily disable face culling to ensure geometry is visible
+        # GL.glEnable(GL.GL_CULL_FACE)
+        # GL.glCullFace(GL.GL_BACK)
         GL.glClearColor(0.1, 0.1, 0.12, 1.0)
 
         print("[Window] Initialized successfully")

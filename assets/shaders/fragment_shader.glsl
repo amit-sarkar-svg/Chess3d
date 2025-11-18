@@ -20,10 +20,23 @@ uniform vec3 highlight_color = vec3(1.0, 0.8, 0.1);
 uniform float ambient_strength = 0.35;
 uniform float diffuse_strength = 0.65;
 
+// Texture control
+uniform bool use_texture = true;
+uniform vec3 base_color = vec3(1.0, 1.0, 1.0);
+
+// Debug: override output color to diagnose rendering
+uniform bool debug_flat = false;
+uniform vec3 debug_color = vec3(1.0, 1.0, 1.0);
+
 void main()
 {
-    // Base color from texture
-    vec3 baseColor = texture(texture0, TexCoord).rgb;
+    if (debug_flat) {
+        FragColor = vec4(debug_color, 1.0);
+        return;
+    }
+    // Base color: from texture or uniform fallback
+    vec3 texColor = texture(texture0, TexCoord).rgb;
+    vec3 baseColor = use_texture ? texColor : base_color;
 
     // Lighting
     vec3 N = normalize(Normal);
