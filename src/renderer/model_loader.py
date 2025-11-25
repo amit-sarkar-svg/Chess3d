@@ -282,3 +282,66 @@ def load_obj(file_path: str, default_texture: str = None):
         tex_id = None
 
     return mesh, tex_id
+def _make_cylinder(radius: float = 0.35, height: float = 1.2, segments: int = 32) -> Mesh:
+    import math
+    verts = []
+    idx = []
+    # side vertices
+    for i in range(segments):
+        ang = (i / segments) * 2.0 * math.pi
+        x = math.cos(ang) * radius
+        z = math.sin(ang) * radius
+        nx, nz = math.cos(ang), math.sin(ang)
+        # bottom and top
+        verts.append([x, 0.0, z, nx, 0.0, nz, i / segments, 0.0])
+        verts.append([x, height, z, nx, 0.0, nz, i / segments, 1.0])
+    # side indices (two triangles per segment)
+    for i in range(segments):
+        i0 = (i * 2)
+        i1 = ((i * 2) + 1)
+        i2 = (((i + 1) % segments) * 2)
+        i3 = (((i + 1) % segments) * 2 + 1)
+        idx.extend([i0, i1, i3, i0, i3, i2])
+    base_start = len(verts)
+    # bottom center
+    verts.append([0.0, 0.0, 0.0, 0.0, -1.0, 0.0, 0.5, 0.0])
+    # bottom ring
+    for i in range(segments):
+        ang = (i / segments) * 2.0 * math.pi
+        x = math.cos(ang) * radius
+        z = math.sin(ang) * radius
+        verts.append([x, 0.0, z, 0.0, -1.0, 0.0, (x / (2*radius)) + 0.5, (z / (2*radius)) + 0.5])
+    for i in range(segments):
+        c = base_start
+        r = base_start + 1 + i
+        r_next = base_start + 1 + ((i + 1) % segments)
+        idx.extend([c, r_next, r])
+    top_start = len(verts)
+    # top center
+    verts.append([0.0, height, 0.0, 0.0, 1.0, 0.0, 0.5, 1.0])
+    # top ring
+    for i in range(segments):
+        ang = (i / segments) * 2.0 * math.pi
+        x = math.cos(ang) * radius
+        z = math.sin(ang) * radius
+        verts.append([x, height, z, 0.0, 1.0, 0.0, (x / (2*radius)) + 0.5, (z / (2*radius)) + 0.5])
+    for i in range(segments):
+        c = top_start
+        r = top_start + 1 + i
+        r_next = top_start + 1 + ((i + 1) % segments)
+        idx.extend([c, r, r_next])
+    return Mesh(np.array(verts, dtype=np.float32), np.array(idx, dtype=np.uint32))
+
+def create_primitive_piece(name: str) -> tuple:
+    """Return a simple Mesh, None texture for a given piece name."""
+    height_map = {
+        "pawn": 1.0,
+        "rook": 1.1,
+        "knight": 1.15,
+        "bishop": 1.2,
+        "queen": 1.3,
+        "king": 1.35,
+    }
+    h = height_map.get(name, 1.0)
+    mesh = _make_cylinder(radius=0.35, height=h, segments=32)
+    return mesh, None

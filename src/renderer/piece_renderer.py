@@ -14,6 +14,7 @@ import numpy as np
 from OpenGL import GL
 
 from .model_loader import load_obj
+from .model_loader import create_primitive_piece
 
 
 class PieceRenderer:
@@ -31,6 +32,7 @@ class PieceRenderer:
         # Dictionary of models:
         # models["pawn"]["white"] -> (mesh, tex_id)
         self.models = {}
+        self.scales = {}
 
         self._load_all_piece_models()
 
@@ -53,8 +55,25 @@ class PieceRenderer:
         white_path = f"{self.asset_folder}/{name}_white.obj"
         black_path = f"{self.asset_folder}/{name}_black.obj"
 
-        mesh_white, tex_white = load_obj(white_path)
-        mesh_black, tex_black = load_obj(black_path)
+        try:
+            mesh_white, tex_white = load_obj(white_path)
+        except Exception:
+            mesh_white, tex_white = create_primitive_piece(name)
+        try:
+            mesh_black, tex_black = load_obj(black_path)
+        except Exception:
+            mesh_black, tex_black = create_primitive_piece(name)
+
+        if getattr(mesh_white, "vertex_count", 0) == 0:
+            mesh_white, tex_white = create_primitive_piece(name)
+        if getattr(mesh_black, "vertex_count", 0) == 0:
+            mesh_black, tex_black = create_primitive_piece(name)
+
+        sx = mesh_white.bounds_max[0] - mesh_white.bounds_min[0]
+        sz = mesh_white.bounds_max[2] - mesh_white.bounds_min[2]
+        extent = max(1e-6, max(sx, sz))
+        target = self.tile_size * 0.85
+        self.scales[name] = float(target / extent)
 
         return {
             "white": (mesh_white, tex_white),
@@ -122,6 +141,8 @@ class PieceRenderer:
 
         self.shader.set_bool("enable_highlight", False)
 
+        # Avoid culling issues with varied model windings
+        GL.glDisable(GL.GL_CULL_FACE)
         for (file, rank), (piece_type, color) in self.board_state.items():
 
             mesh, tex = self.models[piece_type][color]
@@ -150,6 +171,7 @@ class PieceRenderer:
         # Unbind
         GL.glBindTexture(GL.GL_TEXTURE_2D, 0)
         self.shader.stop()
+        GL.glEnable(GL.GL_CULL_FACE)
 
     # ------------------------------------------------------------------------------------
     # Transform
@@ -166,7 +188,11 @@ class PieceRenderer:
         M = np.eye(4, dtype=np.float32)
 
         # Uniform scale for piece models
-        S = 0.75
+        S = self.scales.get("pawn", 0.65 * self.tile_size)
+        key = self.board_state.get((file, rank))
+        if key:
+            ptype, _ = key
+            S = self.scales.get(ptype, S)
         M[0, 0] = S
         M[1, 1] = S
         M[2, 2] = S

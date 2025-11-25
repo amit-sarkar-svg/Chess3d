@@ -56,9 +56,9 @@ class Window:
 
         # OpenGL settings
         GL.glEnable(GL.GL_DEPTH_TEST)
-        # Temporarily disable face culling to ensure geometry is visible
-        # GL.glEnable(GL.GL_CULL_FACE)
-        # GL.glCullFace(GL.GL_BACK)
+        GL.glEnable(GL.GL_CULL_FACE)
+        GL.glCullFace(GL.GL_BACK)
+        GL.glFrontFace(GL.GL_CCW)
         GL.glClearColor(0.1, 0.1, 0.12, 1.0)
 
         print("[Window] Initialized successfully")

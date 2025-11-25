@@ -190,11 +190,10 @@ class OrbitCamera:
         return look_at(eye, target, up)
 
     def get_projection_matrix(self, aspect: float, z_near: float = 0.1, z_far: float = 100.0) -> np.ndarray:
-        """Return projection depending on current mode."""
+        aspect = 1.0 if aspect == 0 or not np.isfinite(aspect) else aspect
         if self.mode == "perspective":
             return perspective(self.fov_y, aspect, z_near, z_far)
         else:
-            # build ortho around target using ortho_half_size (vertical)
             h = self.ortho_half_size
             w = h * aspect
             left, right = -w, w
@@ -313,8 +312,8 @@ class CameraManager:
 
     def to_mode(self, mode: str, duration: float = 0.8):
         """Begin a smooth transition to the requested mode."""
-        if mode not in ("perspective", "orthographic"):
-            raise ValueError("mode must be 'perspective' or 'orthographic'")
+        if mode not in ("perspective", "orthographic", "isometric"):
+            raise ValueError("mode must be 'perspective' or 'orthographic' or 'isometric'")
 
         self._start_mode = self.camera.mode
         self._end_mode = mode
@@ -322,12 +321,20 @@ class CameraManager:
         # Build sensible end params: keep eye/target/up, but adjust fov/ortho size defaults if switching types
         end_params = self._start_params.copy()
         if mode == "perspective":
-            # choose a moderate FOV; keep eye/target/up unchanged
             end_params.fov_y = math.radians(50.0)
-        else:
-            # choose ortho half-size based on distance to target
+        elif mode == "orthographic":
             dist = np.linalg.norm(self._start_params.eye - self._start_params.target)
             end_params.ortho_half_size = max(3.0, float(dist * 0.7))
+        elif mode == "isometric":
+            dist = np.linalg.norm(self._start_params.eye - self._start_params.target)
+            end_params.ortho_half_size = max(3.0, float(dist * 0.7))
+            phi = math.radians(54.7356)
+            theta = math.radians(45.0)
+            sin_phi = math.sin(phi)
+            x = dist * sin_phi * math.cos(theta)
+            y = dist * math.cos(phi)
+            z = dist * sin_phi * math.sin(theta)
+            end_params.eye = self._start_params.target + np.array([x, y, z], dtype=np.float64)
 
         self._end_params = end_params
         self._transition_time = 0.0

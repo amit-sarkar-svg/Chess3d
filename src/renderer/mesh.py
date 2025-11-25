@@ -41,6 +41,15 @@ class Mesh:
         self.VBO = GL.glGenBuffers(1)
         self.EBO = GL.glGenBuffers(1) if self.indices is not None else None
 
+        pos = self.vertices[:, 0:3] if self.vertices.size > 0 else np.zeros((0,3), dtype=np.float32)
+        if pos.shape[0] > 0:
+            self.bounds_min = pos.min(axis=0)
+            self.bounds_max = pos.max(axis=0)
+        else:
+            self.bounds_min = np.array([0.0, 0.0, 0.0], dtype=np.float32)
+            self.bounds_max = np.array([0.0, 0.0, 0.0], dtype=np.float32)
+        self.vertex_count = self.vertices.shape[0]
+
         # Upload to GPU
         self._setup_mesh()
 

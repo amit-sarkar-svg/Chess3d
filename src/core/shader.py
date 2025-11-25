@@ -117,11 +117,12 @@ class Shader:
         """
         Set 4x4 matrix uniform (numpy array) as float32.
         """
+        m = np.array(mat4, dtype=np.float32).T
         glUniformMatrix4fv(
             self._get_uniform_location(name),
             1,
             GL_FALSE,
-            np.array(mat4, dtype=np.float32)
+            m
         )
 
     # ------------------------------------------------------------

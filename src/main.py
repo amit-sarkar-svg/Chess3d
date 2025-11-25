@@ -213,10 +213,12 @@ def main():
         dt = win.delta_time
 
         # Camera mode switching
-        if glfw.KEY_1 in keys_down:
+        if glfw.KEY_1 in keys_down or glfw.KEY_P in keys_down:
             camera_mgr.to_mode("perspective", duration=0.7)
-        if glfw.KEY_2 in keys_down:
+        if glfw.KEY_2 in keys_down or glfw.KEY_O in keys_down:
             camera_mgr.to_mode("orthographic", duration=0.7)
+        if glfw.KEY_3 in keys_down or glfw.KEY_I in keys_down:
+            camera_mgr.to_mode("isometric", duration=0.7)
 
         # Update camera & animations
         camera_mgr.update(dt)
